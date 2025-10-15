@@ -1,193 +1,232 @@
 {
   "google_sheet": {
     "credentials_json": "service_account_credentials.json",
-    "sheet_name": "Devin's WebScrapper Airtable"
+    "sheet_name": "Sample WebScraper"
   },
   "websites": [
+
     {
       "website": "AlphaMindsAcademy",
       "url": "https://alphamindsacademy.com/chess/",
-      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Title", "Description", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "7d"
     },
     {
       "website": "AlphaMindsAcademy",
       "url": "https://alphamindsacademy.com/logic/",
-      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Title", "Description", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "7d"
     },
     {
       "website": "AlphaMindsAcademy",
       "url": "https://alphamindsacademy.com/math/",
-      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Title", "Description", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "7d"
     },
     {
       "website": "AlphaMindsAcademy",
       "url": "https://alphamindsacademy.com/coding-robotics/",
-      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Title", "Description", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "7d"
     },
     {
       "website": "AlphaMindsAcademy",
       "url": "https://alphamindsacademy.com/reading/",
-      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Title", "Description", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "7d"
     },
     {
       "website": "AlphaMindsAcademy",
       "url": "https://alphamindsacademy.com/essay-writing/",
-      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Title", "Description", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "7d"
     },
     {
       "website": "AlphaMindsAcademy",
       "url": "https://alphamindsacademy.com/russianschool-en/",
-      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Title", "Description", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "7d"
     },
     {
       "website": "AlphaMindsAcademy",
       "url": "https://alphamindsacademy.com/chesstournaments/",
-      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Title", "Description", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "7d"
     },
     {
       "website": "AlphaMindsAcademy",
       "url": "https://alphamindsacademy.com/rubiks-cube/",
-      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Title", "Description", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "7d"
     },
     {
       "website": "AlphaMindsAcademy",
       "url": "https://alphamindsacademy.com/private/",
-      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Title", "Description", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "7d"
     },
     {
       "website": "AquaTots",
       "url": "https://www.aqua-tots.com/swim-levels/",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "AquaTots",
       "url": "https://www.aqua-tots.com/swim-levels/baby-swim-lessons/",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "AquaTots",
       "url": "https://www.aqua-tots.com/swim-levels/toddler-swim-classes/",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "AquaTots",
       "url": "https://www.aqua-tots.com/swim-levels/early-swim-lessons/",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "AquaTots",
       "url": "https://www.aqua-tots.com/swim-levels/beginner-swim-lessons/",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "AquaTots",
       "url": "https://www.aqua-tots.com/swim-levels/beginner-intermediate-swim-lessons/",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "AquaTots",
       "url": "https://www.aqua-tots.com/swim-levels/intermediate-swim-lessons/",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "AquaTots",
       "url": "https://www.aqua-tots.com/swim-levels/advanced-swim-lessons/",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "AquaTots",
       "url": "https://www.aqua-tots.com/swim-levels/advanced-swim-lessons-older-kids/",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "AquaTots",
       "url": "https://www.aqua-tots.com/swim-levels/additional-swim-services/",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
+
     {
       "website": "BabyBandStand",
       "url": "https://app.mainstreetsites.com/dmn5031/classes.aspx",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "BabyBandStand",
       "url": "https://www.babybandstand.com/pop-up-music-classes",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "BabyBandStand",
       "url": "https://www.babybandstand.com/playgroups",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "BabyBandStand",
       "url": "https://www.babybandstand.com/kids-ukulele-lessons",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "BabyBandStand",
       "url": "https://www.babybandstand.com/kids-music-classes-hoboken",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "BabyBandStand",
       "url": "https://www.babybandstand.com/preschool-music-classes-nyc",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "BabyBandStand",
       "url": "https://www.babybandstand.com/preschool-music-classes-madison",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "BabyBandStand",
       "url": "https://www.babybandstand.com/toddler-music-classes-livingston",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "BabyBandStand",
       "url": "https://www.babybandstand.com/kids-music-classes-li-queens",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "BabyBandStand",
       "url": "https://www.babybandstand.com/kids-music-classes-bergen-county",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     },
     {
       "website": "BabyBandStand",
       "url": "https://www.babybandstand.com/toddler-music-classes-bronxville",
-      "schema": ["Website", "PageURL", "Title", "ContentSnippet", "ScrapeDate"],
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
+      "timeframe": "1d"
+    },
+    {
+      "website": "Hisawyer",
+      "url": "https://www.hisawyer.com/the-inner-athlete/schedules?widget_tags=fall",
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
+      "timeframe": "7d"
+    },
+    {
+      "website": "Hisawyer",
+      "url": "https://www.hisawyer.com/the-inner-athlete/schedules?widget_tags=winter",
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
+      "timeframe": "7d"
+    },
+    {
+      "website": "SoccerShots",
+      "url": "https://hudsoncounty.soccershots.com/search?zip=07030&zipdis=15&zipunit=1",
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
+      "timeframe": "1d"
+    },
+    {
+      "website": "SoccerShots",
+      "url": "https://hudsoncounty.soccershots.com/search?zip=07030&zipdis=10&zipunit=1",
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
+      "timeframe": "1d"
+    },
+  
+    {
+      "website": "MyGym",
+      "url": "https://www.mygym.com/hoboken/schedules",
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
+      "timeframe": "1d"
+    },
+    {
+      "website": "MyGym",
+      "url": "https://www.mygym.com/hoboken/special-classes",
+      "schema": ["Website", "PageURL", "ClassType", "AgeGroup", "Days", "Times", "Title", "Description", "ScrapeDate"],
       "timeframe": "1d"
     }
   ]
