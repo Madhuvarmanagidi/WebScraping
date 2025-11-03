@@ -1,9 +1,9 @@
-# (Full file — replace your current app.py with this)
+# Updated app.py — extended extraction for AgeRange, ClassSize, ClassLength, DayOfWeek, ClassDescription, ClassTitle, ClassLocation
 import json
 import time
 import argparse
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil import parser as dateparser
 import requests
 from bs4 import BeautifulSoup
@@ -12,33 +12,81 @@ from oauth2client.service_account import ServiceAccountCredentials
 from apscheduler.schedulers.background import BackgroundScheduler
 import pandas as pd
 
-USE_JS_RENDERING = False  # set True & install playwright if you need JS rendering
+# Toggle global JS rendering (Playwright). You can set per-page hints in config as well.
+USE_JS_RENDERING = True  # set True & install playwright if you need JS rendering
 
-def fetch_html(url):
+def fetch_html(url, use_js=None):
+    """
+    Fetch HTML. Uses Playwright if JS rendering is enabled.
+    Now improved to wait for post-load DOM rendering on modern frameworks.
+    Returns the final HTML string or empty string on failure.
+    """
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
             " AppleWebKit/537.36 (KHTML, like Gecko)"
             " Chrome/120.0.0.0 Safari/537.36"
-        )
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
     }
+
     try:
-        if USE_JS_RENDERING:
-            from playwright.sync_api import sync_playwright
+        js = USE_JS_RENDERING if use_js is None else bool(use_js)
+        if js:
+            try:
+                from playwright.sync_api import sync_playwright
+            except Exception:
+                print(
+                    "⚠️ Playwright not available. Install it with: "
+                    "'pip install playwright && playwright install chromium'"
+                )
+                raise
+
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
                 page = browser.new_page()
-                page.goto(url, timeout=30000)
-                page.wait_for_load_state("networkidle", timeout=15000)
+                page.set_default_timeout(90000)
+
+                print(f"[Playwright] Rendering JS page: {url}")
+                page.goto(url, timeout=90000)
+                page.wait_for_load_state("networkidle", timeout=60000)
+
+                # ---- Smart extra waits by domain ----
+                if "alphamindsacademy.com" in url:
+                    # Wait for Elementor containers and headings to load
+                    try:
+                        page.wait_for_selector("h2, h3, .elementor-widget-container", timeout=30000)
+                    except Exception:
+                        pass
+
+                elif "mainstreetsites.com" in url:
+                    # Wait for dynamic class list widget
+                    try:
+                        page.wait_for_selector(".classlist, .schedule, #classlistWidget", timeout=45000)
+                    except Exception:
+                        pass
+
+                elif "soccershots" in url or "hisawyer" in url:
+                    try:
+                        page.wait_for_selector("div, li, section", timeout=20000)
+                    except Exception:
+                        pass
+
+                # Small delay: sometimes data arrives asynchronously
+                time.sleep(3)
+
                 html = page.content()
                 browser.close()
                 return html
-        else:
-            resp = requests.get(url, timeout=20, headers=headers)
-            resp.raise_for_status()
-            return resp.text
+
+        # --- Non-JS fallback ---
+        resp = requests.get(url, timeout=25, headers=headers)
+        resp.raise_for_status()
+        return resp.text
+
     except Exception as e:
-        print(f"Failed to fetch {url}: {e}")
+        print(f"❌ Failed to fetch {url}: {e}")
         return ""
 
 def load_config(path="config.json"):
@@ -54,8 +102,13 @@ def load_config(path="config.json"):
         if not website or not url or not isinstance(schema, list):
             print(f"Config: skipping invalid page #{i}: website={website!r}, url={url!r}, schema_type={type(schema).__name__}")
             continue
+        # allow per-page JS hint: "use_js": true
         valid_pages.append({
-            "website": website, "url": url, "schema": schema, "timeframe": p.get("timeframe", "7d")
+            "website": website,
+            "url": url,
+            "schema": schema,
+            "timeframe": p.get("timeframe", "7d"),
+            "use_js": p.get("use_js", False)
         })
     cfg["websites"] = valid_pages
     return cfg
@@ -82,24 +135,30 @@ def ensure_field(val):
     s = str(val).strip()
     return s if s else "N/A"
 
-# ----- NEW: heuristics for AgeGroup / Days / Times -----
+# ----- Heuristics & regexes for new fields -----
 WEEKDAY_WORDS = r"(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|thur|fri|sat|sun|weekend|weekends)"
 AGE_PATTERNS = [
-    r"ages?\s*\d+\s*[-–to]+\s*\d+\s*(?:yrs?|years|yo)?",   # ages 3-5
-    r"ages?\s*\d+\+?",                                      # ages 3+
-    r"age\s*[:\-]?\s*\d+\s*(?:months|month|yrs|years|yo)?",
-    r"\b(infant|toddler|preschool|pre-school|baby|kids?|children|teen)\b",  # keywords
-    r"\d+\s*(?:months|month)\b",
-    r"\d+\s*(?:yrs|yrs\.|years|yo)\b"
+    # Prioritizing Grade levels (e.g., 'Grade 1 - 5', 'PreK 3') as seen on AlphaMinds
+    r"\b(?:Grade|Grades|PreK|Pre-K)\s*[0-9]+(?:\s*[-\–—]\s*[0-9]+)?\s*(?:\-\s*[0-9]+)?\b",
+    r"\b(?:ages?|age[:\s-]*)\s*\d{1,2}\s*(?:[-–to]+\s*\d{1,2})?\s*(?:yrs?|years|yo|mos?|months)?\b",
+    r"\b\d{1,2}\s*(?:years|yrs|yr|yo|months|mos)\b",
+    r"\b(infant|toddler|preschool|pre-school|baby|kids?|children|teen|adult)\b"
+    r"\b[Kk]\s*[-–]?\s*\d*(?:st|nd|rd|th)?\b",
+    r"\bGrade\s*\d+\b"
 ]
 TIME_PATTERNS = [
-    r"\d{1,2}[:.]\d{2}\s*(?:am|pm|AM|PM)?(?:\s*-\s*\d{1,2}[:.]\d{2}\s*(?:am|pm)?)?",  # 9:30 AM - 10:15 AM
+    r"\d{1,2}[:.]\d{2}\s*(?:am|pm|AM|PM)?(?:\s*[–\-]\s*\d{1,2}[:.]\d{2}\s*(?:am|pm|AM|PM)?)?",  # 9:30 AM - 10:15 AM
     r"\d{1,2}\s*(?:am|pm|AM|PM)\b",  # 9 AM
     r"\d{1,2}[:.]\d{2}\b",           # 09:30
 ]
 AGE_REGEX = re.compile("|".join(AGE_PATTERNS), re.I)
-TIME_REGEX = re.compile("|".join(TIME_PATTERNS))
+TIME_REGEX = re.compile("|".join(TIME_PATTERNS), re.I)
 DAY_REGEX = re.compile(WEEKDAY_WORDS, re.I)
+
+# class size & duration & address
+CLASS_SIZE_REGEX = re.compile(r'\b(?:class size|capacity|max(?:imum)?(?: seats?)?|limit(?:ed)?|spots(?: available)?)[:\s]*\D*?(\d{1,3})\b', re.I)
+DURATION_REGEX = re.compile(r'(\d{1,3}\s*(?:min(?:ute)?s?|mins?|minutes?|hr|hrs|hour|hours))', re.I)
+ADDRESS_SELECTORS = ['address', 'addr', 'location', 'studio', 'venue', 'directions', 'location-name', 'map']
 
 def extract_age_day_time_from_text(text):
     """Search text for likely age-group, days (weekdays), and times. Returns (age, days, times)."""
@@ -114,148 +173,364 @@ def extract_age_day_time_from_text(text):
     days_found = []
     for m in DAY_REGEX.finditer(txt):
         w = m.group(0).strip()
-        if w.lower() not in [d.lower() for d in days_found]:
-            days_found.append(w)
+        lw = w.lower()
+        if lw not in [d.lower() for d in days_found]:
+            days_found.append(w.capitalize() if len(w) > 3 else w.capitalize())
     days = ", ".join(days_found) if days_found else "N/A"
 
-    # Times: find first reasonable time-like match (could be multiple)
-    times_found = TIME_REGEX.findall(txt)
-    # TIME_REGEX.findall returns tuples if pattern groups exist; normalize
-    def normalize_match(m):
-        if isinstance(m, tuple):
-            for g in m:
-                if g:
-                    return g
-            return ""
-        return m
-    times = []
-    for m in times_found:
-        nm = normalize_match(m)
-        if nm and nm not in times:
-            times.append(nm.strip())
-    times_str = ", ".join(times) if times else "N/A"
+    # Times: find matches
+    times_found = [m.group(0).strip() for m in TIME_REGEX.finditer(txt)]
+    times = ", ".join(dict.fromkeys(times_found)) if times_found else "N/A"
 
-    return age, days, times_str
+    return age, days, times
 
-def scrape_alphaminds(url, schema, website_name):
+def extract_size_length_address(text, node=None, soup=None):
     """
-    Improved AlphaMinds scraper:
-    - Finds class headings (h3/h4)
-    - Scans sibling nodes up to the next heading for AgeGroup, Days, Times, Description
-    - Uses regex heuristics to extract times like '9:30 AM', '9:30-10:15', '9am', '14:00', etc.
+    Best-effort extraction of class size, duration (string) and address.
+    node: optional BeautifulSoup node to scope search; soup: full page.
     """
-    html = fetch_html(url)
-    if not html:
-        return []
+    size = "N/A"
+    length = "N/A"
+    address = "N/A"
+    txt = (text or "")
+    # size
+    m = CLASS_SIZE_REGEX.search(txt)
+    if m:
+        size = m.group(1)
+    # duration
+    m2 = DURATION_REGEX.search(txt)
+    if m2:
+        length = m2.group(1).strip()
+    # scoped node address
+    if node is not None:
+        addr_tag = node.find('address')
+        if addr_tag:
+            address = addr_tag.get_text(" ", strip=True)
+        else:
+            for sel in ADDRESS_SELECTORS:
+                found = node.select(f'[class*="{sel}"], [id*="{sel}"]')
+                if found:
+                    address = " ".join(x.get_text(" ", strip=True) for x in found).strip()
+                    if address:
+                        break
+    # global JSON-LD or page address
+    if (not address or address == "N/A") and soup is not None:
+        # JSON-LD
+        for obj in _extract_jsonld_objects(soup):
+            loc = None
+            if isinstance(obj, dict):
+                loc = obj.get('location') or obj.get('address') or obj.get('location') or obj.get('venue')
+            if isinstance(loc, dict):
+                parts = []
+                for k in ('streetAddress','addressLocality','postalCode','addressRegion','addressCountry','name'):
+                    if loc.get(k):
+                        parts.append(str(loc.get(k)))
+                if parts:
+                    address = ", ".join(parts)
+                    break
+            elif isinstance(loc, str):
+                address = loc
+                break
+        if (not address or address == "N/A"):
+            addr_tag = soup.find('address')
+            if addr_tag:
+                address = addr_tag.get_text(" ", strip=True)
+            else:
+                # search common classes globally
+                for sel in ADDRESS_SELECTORS:
+                    found = soup.select(f'[class*="{sel}"], [id*="{sel}"]')
+                    if found:
+                        address = " ".join(x.get_text(" ", strip=True) for x in found)[:300].strip()
+                        if address:
+                            break
+    return ensure_field(size), ensure_field(length), ensure_field(address)
 
+def parse_time_range_to_duration(timestr):
+    """
+    Given a timestring like '9:30 AM - 10:15 AM', try to compute duration.
+    Strictly checks for time components to prevent interpreting grades/numbers as time.
+    """
+    if not timestr or timestr == "N/A":
+        return "N/A"
+    
+    # Must contain a time component (colon or AM/PM) AND a separator
+    if not re.search(r'(:|\s(?:am|pm))\s*[–—\-]\s*(\d{1,2})', timestr, re.I):
+        return "N/A"
+    
+    # find two time tokens separated by a dash or 'to'
+    parts = re.split(r'\s*[–—\-]\s*|\s+to\s+', timestr)
+    
+    # We require exactly two parts for a range calculation
+    if len(parts) < 2:
+        return "N/A"
+        
+    try:
+        t0 = dateparser.parse(parts[0], default=datetime(2000,1,1))
+        t1 = dateparser.parse(parts[1], default=datetime(2000,1,1))
+        
+        # handle midnight-wrap
+        if t1 < t0:
+            t1 = t1 + timedelta(days=1)
+            
+        diff = t1 - t0
+        
+        # Guard against illogical or massive durations (Max 6 hours duration limit)
+        if diff.total_seconds() <= 0 or diff.total_seconds() > (6 * 3600): 
+             return "N/A"
+
+        mins = int(diff.total_seconds() // 60)
+        if mins < 60:
+            return f"{mins}m"
+        else:
+            h = mins // 60
+            m = mins % 60
+            return f"{h}h{m}m" if m else f"{h}h"
+    except Exception:
+        return "N/A"
+
+# --- New Aquatots Scraper ---
+def scrape_aquatots(url, schema, website_name, use_js=False):
+    html = fetch_html(url, use_js=use_js)
+    if not html: return []
     soup = BeautifulSoup(html, "html.parser")
     items = []
+    
+    # 1. Class Title/Type (Often in H1 or Title)
+    title = soup.title.string.replace(" | Aqua-Tots Swim Schools", "").strip() if soup.title else "N/A"
+    
+    # 2. Extract details from the prominent level description area
+    level_tags = soup.select('.swim-level-detail')
+    
+    if not level_tags:
+        # Fallback to generic page scrape if structure not found
+        return scrape_generic(url, schema, website_name, use_js=use_js)
 
-    # Time regex: matches 9:30, 9:30 AM, 9am, 09:30, 9:30-10:15, 9:30–10:15, 9:30 AM - 10:15 AM
-    time_re = re.compile(
-        r'((?:\d{1,2}[:.]\d{2}|\d{1,2})\s*(?:am|pm|AM|PM)?(?:\s*[–\-]\s*(?:\d{1,2}[:.]\d{2}|\d{1,2})\s*(?:am|pm|AM|PM)?)?)',
-        re.IGNORECASE
-    )
-    # Age and days regex (already in your heuristics, but keep local quick checks)
-    age_re = re.compile(r'(ages?\s*\d+\s*(?:[-–to]\s*\d+)?|\d+\s*(?:months|month|yrs|years)\b|infant|toddler|preschool|kids|children)', re.I)
-    days_re = re.compile(r'(Mon|Tue|Wed|Thu|Fri|Sat|Sun|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|weekend|weekends)', re.I)
+    for level_tag in level_tags:
+        class_type_tag = level_tag.select_one('h2, h3')
+        class_type = class_type_tag.get_text(" ", strip=True) if class_type_tag else title
+        
+        description_tag = level_tag.select_one('p')
+        description = description_tag.get_text(" ", strip=True) if description_tag else "N/A"
 
-    for heading in soup.find_all(["h3", "h4"]):
-        class_type = ensure_field(heading.get_text(" ", strip=True))
+        full_text = level_tag.get_text(" ", strip=True)
+        
+        # Aggressive Age Extraction using global regex
         age = "N/A"
-        days = "N/A"
-        times = "N/A"
-        description_parts = []
-
-        # Scan siblings until next heading
-        for sib in heading.find_next_siblings():
-            if sib.name in ["h3", "h4"]:
-                break
-            txt = sib.get_text(" ", strip=True)
-            if not txt:
-                continue
-
-            # Prefer explicit labeled fields if present
-            # e.g., "Age Group: 6-8", "Days: Mon/Wed", "Times: 4:00-5:00pm"
-            if "age group" in txt.lower() or txt.lower().startswith("age:") or "ages" in txt.lower():
-                m = age_re.search(txt)
-                if m:
-                    age = m.group(0).strip()
-            if "day" in txt.lower() or "days" in txt.lower() or re.search(r'\b(mon(day)?|tue|wed|thu|fri|sat|sun|weekend)\b', txt, re.I):
-                # Aggregate distinct weekday mentions
-                found_days = list(dict.fromkeys(days_re.findall(txt)))
-                if found_days:
-                    days = ", ".join(found_days)
-            # Times: either labeled or pattern matches
-            if "time" in txt.lower() or "when" in txt.lower() or time_re.search(txt):
-                t_matches = [m.group(0).strip() for m in time_re.finditer(txt)]
-                if t_matches:
-                    times = ", ".join(dict.fromkeys(t_matches))  # unique preserve order
-
-            # Collect description paragraphs / lists
-            if sib.name in ["p", "ul", "ol", "div", "li"]:
-                description_parts.append(txt)
-
-        description = (" ".join(x for x in description_parts if x)).strip() or "N/A"
-
-        # If we still don't have age/days/times, try to infer from the small local block (heading + following text)
-        if age == "N/A" or days == "N/A" or times == "N/A":
-            nearby_text = heading.get_text(" ", strip=True) + " " + " ".join(description_parts[:3])
-            a_guess, d_guess, t_guess = extract_age_day_time_from_text(nearby_text)
-            if age == "N/A" and a_guess != "N/A":
-                age = a_guess
-            if days == "N/A" and d_guess != "N/A":
-                days = d_guess
-            if times == "N/A" and t_guess != "N/A":
-                times = t_guess
-
-        # Build Title: prefer a short descriptive subtitle rather than duplicate ClassType
-        first_sentence = (description.split(".")[0].strip() if description != "N/A" else "")
-        title = f"{class_type} — {first_sentence}" if first_sentence and first_sentence.lower() not in class_type.lower() else class_type
-
+        age_match = AGE_REGEX.search(full_text)
+        if age_match:
+            age = age_match.group(0).strip()
+            
+        # AquaTots pages typically don't list specific times/days/locations/size on these level pages
+        
         row = {
             "Website": website_name,
             "PageURL": url,
-            "ClassType": class_type,
-            "AgeGroup": ensure_field(age),
-            "Days": ensure_field(days),
-            "Times": ensure_field(times),
-            "Title": ensure_field(title),
-            "Description": ensure_field(description),
+            "ClassTitle": ensure_field(title),
+            "ClassType": ensure_field(class_type),
+            "AgeRange": ensure_field(age),
+            "ClassSize": "N/A", 
+            "ClassLength": "N/A", 
+            "DayOfWeek": "N/A",
+            "Times": "N/A",
+            "ClassDescription": ensure_field(description),
+            "ClassLocation": "General/Online (Check local branch for address)",
             "ScrapeDate": to_mmddyyyy(datetime.now())
         }
         items.append({k: row.get(k, "N/A") for k in schema})
+        
+    return items
 
-    # Post-process: normalize and dedupe by ClassType
-    if not items:
-        return []
 
-    df = pd.DataFrame(items)
-    for col in df.columns:
-        df[col] = df[col].map(ensure_field)
-    df = df.drop_duplicates(subset=["ClassType"])
-    return df.to_dict(orient="records")
-def scrape_generic(url, schema, website_name):
-    html = fetch_html(url)
+def scrape_alphaminds(url, schema, website_name, use_js=False):
+    html = fetch_html(url, use_js=use_js)
+    if not html: return []
+    soup = BeautifulSoup(html, "html.parser")
+    items = []
+    
+    # --- ENHANCED FILTERING LIST (Targeting Irrelevant Headers) ---
+    SKIP_KEYWORDS = [
+        "testimonial", "teacher", "contact us", "quick link", "registration", 
+        "why choose", "core strengths", "your message has been sent", 
+        "programs:", "jeremiah hosea", "rilwan ameen", "anthony kozikowsky", 
+        "george gawargi", "ivette garcia", "matthew rydell", "svetlana margoulis", 
+        "vera vitali", "stay in touch", "classes", "read more", "enroll",
+        "private lessons", "individual instruction", "small group instruction"
+    ]
+
+    time_re = re.compile(r'((?:\d{1,2}[:.]\d{2}|\d{1,2})\s*(?:am|pm|AM|PM)?(?:\s*[–\-]\s*(?:\d{1,2}[:.]\d{2}|\d{1,2})\s*(?:am|pm|AM|PM)?)?)', re.I)
+
+    for heading in soup.find_all(["h2", "h3", "h4"]):
+        class_type = ensure_field(heading.get_text(" ", strip=True))
+        lower_class_type = class_type.lower()
+        
+        # 1. Skip based on explicit keywords
+        if any(kw in lower_class_type for kw in SKIP_KEYWORDS):
+            continue
+            
+        # 2. Skip if the title is too short and non-descriptive
+        # if len(class_type.split()) < 2 and class_type not in ["Classes Offered", "All Age Groups"]:
+            # continue
+
+        age = "N/A"; days = "N/A"; times = "N/A"; description_parts = []
+        class_size = "N/A"; class_length = "N/A"; class_location = "N/A"
+        
+        # Start collecting text from siblings
+        for sib in heading.find_next_siblings():
+            if sib.name in ["h2", "h3", "h4"]:
+                break
+            
+            # Stop if we hit a registration button or call-to-action divider (common on this site)
+            if sib.name == "div" and sib.find(["a", "button"], string=re.compile("register", re.I)):
+                break
+            
+            # Skip WordPress interactivity scripts if they appear in the raw text
+            if sib.name == "script" or (sib.get("id") and "wp-interactivity-store" in sib.get("id")):
+                 continue
+            
+            txt = sib.get_text(" ", strip=True)
+            if not txt:
+                continue
+                
+            low = txt.lower()
+            
+            # --- AlphaMinds Specific Extractions (Prioritized) ---
+            if age == "N/A":
+                age_line_match = re.search(r'(Age Group:.*?)\s*(Days:|$)', txt, re.I | re.DOTALL)
+                if age_line_match:
+                    age_text = age_line_match.group(1)
+                    m = AGE_REGEX.search(age_text)
+                    if m:
+                        age = m.group(0).strip()
+                        
+            if days == "N/A":
+                # Look for "Days: <Day, Day, Day>"
+                days_line_match = re.search(r'Days:\s*(.*?)(?:\s*Our|\s*Register)', txt, re.I | re.DOTALL)
+                if days_line_match:
+                    day_list = days_line_match.group(1).split(',')
+                    cleaned_days = [d.strip().capitalize() for d in day_list if d.strip()]
+                    if cleaned_days:
+                         days = ", ".join(cleaned_days)
+            # --- End AlphaMinds Specific Extractions ---
+
+            
+            # Age detection (using global AGE_REGEX) - secondary search
+            m = AGE_REGEX.search(txt)
+            if m and age == "N/A": 
+                age = m.group(0).strip()
+            
+            # Time detection
+            if re.search(r'\b(time|when)\b', low) or time_re.search(txt):
+                tms = [m.group(0).strip() for m in time_re.finditer(txt)]
+                if tms:
+                    current_times = times.split(', ') if times != 'N/A' else []
+                    new_times = list(dict.fromkeys(current_times + tms))
+                    times = ", ".join(new_times)
+
+                    # Compute length if a time range is present AND length is not already set
+                    cl = parse_time_range_to_duration(times)
+                    if cl != "N/A" and class_length == "N/A":
+                        class_length = cl
+
+            # Duration/Size
+            if re.search(r'\b(max|capacity|class size|limit|spots)\b', low) or re.search(r'\b(duration|length|minutes|hours)\b', low):
+                m = CLASS_SIZE_REGEX.search(txt)
+                if m:
+                    class_size = m.group(1)
+                m2 = DURATION_REGEX.search(txt)
+                if m2 and class_length == "N/A":
+                    class_length = m2.group(1).strip()
+                    
+            # Collect description parts
+            if sib.name in ["p", "div", "li", "ul", "ol"]:
+                # Exclude known location/API junk from the description text
+                if "schoolMapsSettings" not in txt and "imports" not in txt and "var schoolMapsSettings" not in txt:
+                    description_parts.append(txt)
+
+            # Location extraction (use helper function which tries to find address tags/classes)
+            if class_location == "N/A" and re.search(r'\b(address|location|studio|venue)\b', low):
+                _, _, s_addr = extract_size_length_address(txt, node=sib, soup=soup)
+                if s_addr and s_addr != "N/A":
+                    class_location = s_addr
+        
+        # --- Post-processing and Heuristics ---
+
+        # 3. Clean up the final description
+        description = (" ".join(x for x in description_parts if x)).strip() or "N/A"
+        
+        # 4. Aggressive Fallback: Final sweep of all text
+        full_text_for_search = class_type + " " + description
+        
+        if age == "N/A" or days == "N/A" or times == "N/A" or class_length == "N/A":
+            a_guess, d_guess, t_guess = extract_age_day_time_from_text(full_text_for_search)
+            
+            if age == "N/A" and a_guess != "N/A": age = a_guess
+            if days == "N/A" and d_guess != "N/A": days = d_guess
+            
+            if times == "N/A" and t_guess != "N/A":
+                times = t_guess
+                if class_length == "N/A":
+                    cl = parse_time_range_to_duration(times)
+                    if cl != "N/A": class_length = cl
+
+            # Try extracting duration string again if duration is missing
+            m2 = DURATION_REGEX.search(full_text_for_search)
+            if m2 and class_length == "N/A":
+                class_length = m2.group(1).strip()
+        
+        # 5. Final cleanup for location pollution risk 
+        if class_location and ('schoolMapsSettings' in class_location or 'wordpress/interactivity' in class_location or 'AIzaSyDn9tufwujzyp22Go' in class_location):
+            class_location = "N/A"
+        
+        # --- Final Row Filtering ---
+
+        # Build the final structured row
+        row = {
+            "Website": website_name,
+            "PageURL": url,
+            "ClassTitle": ensure_field(class_type),
+            "ClassType": ensure_field(class_type),
+            "AgeRange": ensure_field(age),
+            "ClassSize": ensure_field(class_size),
+            "ClassLength": ensure_field(class_length),
+            "DayOfWeek": ensure_field(days),
+            "Times": ensure_field(times),
+            "ClassDescription": ensure_field(description),
+            "ClassLocation": ensure_field(class_location),
+            "ScrapeDate": to_mmddyyyy(datetime.now())
+        }
+        
+        # Only output rows that contain some meaningful data (Title, Age, Length, or Day)
+        if (row["AgeRange"] != "N/A" or row["ClassLength"] != "N/A" or row["DayOfWeek"] != "N/A" or row["ClassTitle"] not in ["Classes Offered", "All Age Groups"]):
+             items.append({k: row.get(k, "N/A") for k in schema})
+             
+    return items
+
+def scrape_generic(url, schema, website_name, use_js=False):
+    html = fetch_html(url, use_js=use_js)
     if not html: return []
     soup = BeautifulSoup(html, "html.parser")
     items = []
     try:
         title = soup.title.string.strip() if soup.title else "N/A"
-        # Use nearest <p> or a longer text snippet for description
         p = soup.find("p")
         snippet = p.get_text(" ", strip=True) if p else soup.get_text(" ", strip=True)[:300]
-        # Heuristics from whole page to try find age/days/times
         age, days, times = extract_age_day_time_from_text(soup.get_text(" ", strip=True))
+        class_size, class_length, class_location = extract_size_length_address(soup.get_text(" ", strip=True), node=None, soup=soup)
+        # if times present and length unknown, try compute
+        if class_length == "N/A" and times and times != "N/A":
+            class_length = parse_time_range_to_duration(times)
         row = {
             "Website": website_name,
             "PageURL": url,
+            "ClassTitle": ensure_field(title),
             "ClassType": ensure_field(title),
-            "AgeGroup": ensure_field(age),
-            "Days": ensure_field(days),
+            "AgeRange": ensure_field(age),
+            "ClassSize": ensure_field(class_size),
+            "ClassLength": ensure_field(class_length),
+            "DayOfWeek": ensure_field(days),
             "Times": ensure_field(times),
-            "Title": ensure_field(title),
-            "Description": ensure_field(snippet),
+            "ClassDescription": ensure_field(snippet),
+            "ClassLocation": ensure_field(class_location),
             "ScrapeDate": to_mmddyyyy(datetime.now()),
         }
         items.append({k: row.get(k, "N/A") for k in schema})
@@ -277,8 +552,9 @@ def _extract_jsonld_objects(soup):
             continue
     return objs
 
-def scrape_soccershots(url, schema, website_name):
-    html = fetch_html(url)
+def scrape_soccershots(url, schema, website_name, use_js=True):
+    # SoccerShots search pages generally render results client-side — enable JS by default
+    html = fetch_html(url, use_js=use_js)
     if not html: return []
     soup = BeautifulSoup(html, "html.parser")
     items = []
@@ -293,135 +569,79 @@ def scrape_soccershots(url, schema, website_name):
             date = c.get("startDate") or ""
             times = c.get("time") or ""
             age = "N/A"
+            class_size = "N/A"
+            class_length = "N/A"
+            class_location = "N/A"
+            # try location object
+            loc = c.get("location") or c.get("venue") or c.get("address")
+            if isinstance(loc, dict):
+                parts = []
+                for k in ('streetAddress','addressLocality','postalCode','addressRegion','addressCountry','name'):
+                    if loc.get(k):
+                        parts.append(str(loc.get(k)))
+                if parts:
+                    class_location = ", ".join(parts)
+            elif isinstance(loc, str):
+                class_location = loc
             row = {
                 "Website": website_name,
                 "PageURL": url,
+                "ClassTitle": ensure_field(title),
                 "ClassType": ensure_field(title),
-                "AgeGroup": ensure_field(age),
-                "Days": ensure_field(date),
+                "AgeRange": ensure_field(age),
+                "ClassSize": ensure_field(class_size),
+                "ClassLength": ensure_field(class_length),
+                "DayOfWeek": ensure_field(date),
                 "Times": ensure_field(times),
-                "Title": ensure_field(title),
-                "Description": ensure_field(desc),
+                "ClassDescription": ensure_field(desc),
+                "ClassLocation": ensure_field(class_location),
                 "ScrapeDate": to_mmddyyyy(datetime.now())
             }
             items.append({k: row.get(k, "N/A") for k in schema})
     if items:
         return items
-
-    # Try DOM heuristics: locate candidate blocks
-    selectors = ["div.result", "div.search-result", "div.search-listing", "li.result", "div.card", "div.listing", "div.item"]
+    # Fallback to DOM heuristics (best-effort)
+    # Added common SoccerShots specific selectors like search-result-card
+    selectors = ["div.search-result-card", "div.result", "div.search-result", "div.search-listing", "li.result", "div.card", "div.listing", "div.item", ".product"]
     for sel in selectors:
         nodes = soup.select(sel)
         if not nodes:
             continue
         for node in nodes:
-            title = node.find(["h2", "h3", "h4"])
-            title_text = title.get_text(" ", strip=True) if title else (node.find("a").get_text(" ", strip=True) if node.find("a") else "N/A")
+            title = node.find(["h2","h3","h4"]) or node.find("a")
+            title_text = title.get_text(" ", strip=True) if title else node.get_text(" ", strip=True)[:100]
             snippet = node.get_text(" ", strip=True)
             age, days, times = extract_age_day_time_from_text(snippet)
+            class_size, class_length, class_location = extract_size_length_address(snippet, node=node, soup=soup)
+            if class_length == "N/A" and times and times != "N/A":
+                class_length = parse_time_range_to_duration(times)
             row = {
                 "Website": website_name,
                 "PageURL": url,
+                "ClassTitle": ensure_field(title_text),
                 "ClassType": ensure_field(title_text),
-                "AgeGroup": ensure_field(age),
-                "Days": ensure_field(days),
+                "AgeRange": ensure_field(age),
+                "ClassSize": ensure_field(class_size),
+                "ClassLength": ensure_field(class_length),
+                "DayOfWeek": ensure_field(days),
                 "Times": ensure_field(times),
-                "Title": ensure_field(title_text),
-                "Description": ensure_field(snippet),
+                "ClassDescription": ensure_field(snippet),
+                "ClassLocation": ensure_field(class_location),
                 "ScrapeDate": to_mmddyyyy(datetime.now())
             }
             items.append({k: row.get(k, "N/A") for k in schema})
         if items:
             return items
+    # final fallback
+    return scrape_generic(url, schema, website_name, use_js=use_js)
 
-    # Anchor fallback
-    anchors = soup.find_all("a", href=True)
-    for a in anchors:
-        txt = a.get_text(" ", strip=True)
-        if not txt or len(txt) < 8 or re.search(r'login|register|contact|facebook|instagram', txt, re.I):
-            continue
-        age, days, times = extract_age_day_time_from_text(a.get("title") or a.get_text(" ", strip=True))
-        row = {
-            "Website": website_name,
-            "PageURL": url,
-            "ClassType": ensure_field(txt),
-            "AgeGroup": ensure_field(age),
-            "Days": ensure_field(days),
-            "Times": ensure_field(times),
-            "Title": ensure_field(txt),
-            "Description": ensure_field(a.get("title") or ""),
-            "ScrapeDate": to_mmddyyyy(datetime.now())
-        }
-        items.append({k: row.get(k, "N/A") for k in schema})
-        if len(items) >= 8:
-            break
-    if items:
-        return items
-
-    # Nothing found — diagnostics + generic fallback
-    print(f"  [SoccerShots] no structured listings detected at {url}")
-    snippet = soup.get_text(" ", strip=True)[:400]
-    print(f"  [SoccerShots] page snippet: {snippet!r}")
-    return scrape_generic(url, schema, website_name)
-
-def scrape_mygym(url, schema, website_name):
-    html = fetch_html(url)
+def scrape_mygym(url, schema, website_name, use_js=False):
+    html = fetch_html(url, use_js=use_js)
     if not html: return []
     soup = BeautifulSoup(html, "html.parser")
     items = []
-    # Look for card/listing nodes
-    nodes = soup.select("div.schedule-card, div.class-card, div.card, li.class-item, div.schedule")
+    nodes = soup.select("div.schedule-item, div.class-box, div.schedule-card, div.class-card, div.card, li.class-item, div.schedule, .class-listing, .class")
     if not nodes:
-        # fallback: search for headings and their following text
-        headings = soup.find_all(["h2", "h3", "h4"])
-        for h in headings:
-            title = h.get_text(" ", strip=True)
-            snippet = ""
-            # look at next siblings within small range
-            for sib in h.find_next_siblings(limit=6):
-                snippet += " " + sib.get_text(" ", strip=True)
-            age, days, times = extract_age_day_time_from_text(snippet or soup.get_text(" ", strip=True))
-            row = {
-                "Website": website_name,
-                "PageURL": url,
-                "ClassType": ensure_field(title),
-                "AgeGroup": ensure_field(age),
-                "Days": ensure_field(days),
-                "Times": ensure_field(times),
-                "Title": ensure_field(title),
-                "Description": ensure_field(snippet.strip() or title),
-                "ScrapeDate": to_mmddyyyy(datetime.now())
-            }
-            items.append({k: row.get(k, "N/A") for k in schema})
-        return items if items else scrape_generic(url, schema, website_name)
-
-    for node in nodes:
-        title = node.find(["h2", "h3", "h4"])
-        title_text = title.get_text(" ", strip=True) if title else (node.find("a").get_text(" ", strip=True) if node.find("a") else "N/A")
-        snippet = node.get_text(" ", strip=True)
-        age, days, times = extract_age_day_time_from_text(snippet)
-        row = {
-            "Website": website_name,
-            "PageURL": url,
-            "ClassType": ensure_field(title_text),
-            "AgeGroup": ensure_field(age),
-            "Days": ensure_field(days),
-            "Times": ensure_field(times),
-            "Title": ensure_field(title_text),
-            "Description": ensure_field(snippet),
-            "ScrapeDate": to_mmddyyyy(datetime.now())
-        }
-        items.append({k: row.get(k, "N/A") for k in schema})
-    return items if items else scrape_generic(url, schema, website_name)
-
-def scrape_hisawyer(url, schema, website_name):
-    html = fetch_html(url)
-    if not html: return []
-    soup = BeautifulSoup(html, "html.parser")
-    items = []
-    nodes = soup.select("div.schedule-item, div.schedules, div.event, li.event")
-    if not nodes:
-        # try headings
         headings = soup.find_all(["h2","h3","h4"])
         for h in headings:
             title = h.get_text(" ", strip=True)
@@ -429,72 +649,95 @@ def scrape_hisawyer(url, schema, website_name):
             for sib in h.find_next_siblings(limit=6):
                 snippet += " " + sib.get_text(" ", strip=True)
             age, days, times = extract_age_day_time_from_text(snippet)
+            class_size, class_length, class_location = extract_size_length_address(snippet, node=h, soup=soup)
+            if class_length == "N/A" and times and times != "N/A":
+                class_length = parse_time_range_to_duration(times)
             row = {
                 "Website": website_name,
                 "PageURL": url,
+                "ClassTitle": ensure_field(title),
                 "ClassType": ensure_field(title),
-                "AgeGroup": ensure_field(age),
-                "Days": ensure_field(days),
+                "AgeRange": ensure_field(age),
+                "ClassSize": ensure_field(class_size),
+                "ClassLength": ensure_field(class_length),
+                "DayOfWeek": ensure_field(days),
                 "Times": ensure_field(times),
-                "Title": ensure_field(title),
-                "Description": ensure_field(snippet.strip() or title),
+                "ClassDescription": ensure_field(snippet.strip() or title),
+                "ClassLocation": ensure_field(class_location),
                 "ScrapeDate": to_mmddyyyy(datetime.now())
             }
             items.append({k: row.get(k, "N/A") for k in schema})
-        return items if items else scrape_generic(url, schema, website_name)
-
+        return items if items else scrape_generic(url, schema, website_name, use_js=use_js)
     for node in nodes:
         title = node.find(["h2","h3","h4"]) or node.find("a")
-        title_text = title.get_text(" ", strip=True) if title else "N/A"
+        title_text = title.get_text(" ", strip=True) if title else node.get_text(" ", strip=True)[:80]
         snippet = node.get_text(" ", strip=True)
         age, days, times = extract_age_day_time_from_text(snippet)
+        class_size, class_length, class_location = extract_size_length_address(snippet, node=node, soup=soup)
+        if class_length == "N/A" and times and times != "N/A":
+            class_length = parse_time_range_to_duration(times)
         row = {
             "Website": website_name,
             "PageURL": url,
+            "ClassTitle": ensure_field(title_text),
             "ClassType": ensure_field(title_text),
-            "AgeGroup": ensure_field(age),
-            "Days": ensure_field(days),
+            "AgeRange": ensure_field(age),
+            "ClassSize": ensure_field(class_size),
+            "ClassLength": ensure_field(class_length),
+            "DayOfWeek": ensure_field(days),
             "Times": ensure_field(times),
-            "Title": ensure_field(title_text),
-            "Description": ensure_field(snippet),
+            "ClassDescription": ensure_field(snippet),
+            "ClassLocation": ensure_field(class_location),
             "ScrapeDate": to_mmddyyyy(datetime.now())
         }
         items.append({k: row.get(k, "N/A") for k in schema})
     return items
 
+def scrape_hisawyer(url, schema, website_name, use_js=False):
+    # similar to mygym/generic heuristics
+    return scrape_generic(url, schema, website_name, use_js=use_js)
+
+def scrape_babybandstand(url, schema, website_name, use_js=False):
+    # babybandstand often uses the mainstreetsites widget which requires JS
+    # The dispatcher handles force-enabling JS if configured.
+    return scrape_generic(url, schema, website_name, use_js=use_js)
+
 SCRAPER_REGISTRY = {
     "alphamindsacademy": scrape_alphaminds,
+    "aquatots": scrape_aquatots, # Added new scraper to registry
     "soccershots": scrape_soccershots,
     "mygym": scrape_mygym,
     "hisawyer": scrape_hisawyer,
+    "babybandstand": scrape_babybandstand,
     "generic": scrape_generic,
 }
 
 def run_scrape_job(page_config, loader):
     website_name = page_config.get("website", "N/A")
     url = page_config.get("url", "N/A")
-    print(f"[{datetime.now().isoformat()}] Running scrape for: {website_name} - {url}")
+    # Determine JS usage: global setting, or page specific setting, or specific site override
+    use_js = page_config.get("use_js", False) or USE_JS_RENDERING 
+    
+    print(f"[{datetime.now().isoformat()}] Running scrape for: {website_name} - {url} (use_js={use_js})")
     schema = page_config.get("schema")
     if not isinstance(schema, list):
         print("  Invalid schema — skipping page.")
         return
-
     wl = (website_name or "").lower()
+    
+    scraper_func = SCRAPER_REGISTRY.get(wl, SCRAPER_REGISTRY["generic"])
+    
+    # Handle specific overrides where JS is mandatory (e.g., SoccerShots)
+    if "soccershots" in wl or "hudsoncounty" in wl:
+        scraper_func = SCRAPER_REGISTRY["soccershots"]
+        use_js = True
+
     try:
-        if "alphamindsacademy" in wl or "alphaminds" in wl:
-            items = SCRAPER_REGISTRY["alphamindsacademy"](url, schema, website_name)
-        elif "soccershots" in wl or "hudsoncounty" in wl:
-            items = SCRAPER_REGISTRY["soccershots"](url, schema, website_name)
-        elif "mygym" in wl:
-            items = SCRAPER_REGISTRY["mygym"](url, schema, website_name)
-        elif "hisawyer" in wl:
-            items = SCRAPER_REGISTRY["hisawyer"](url, schema, website_name)
-        else:
-            items = SCRAPER_REGISTRY.get(wl, SCRAPER_REGISTRY["generic"])(url, schema, website_name)
+        items = scraper_func(url, schema, website_name, use_js=use_js)
     except Exception as e:
         print(f"  Exception while scraping {website_name}: {e}")
         items = []
-
+    
     if not items:
         print("  No items found.")
         return
@@ -503,6 +746,7 @@ def run_scrape_job(page_config, loader):
 
 class GoogleSheetLoader:
     def __init__(self, creds_json_path, sheet_name):
+        scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
         self.creds_json_path = creds_json_path
         self.sheet_name = sheet_name
         self.client = None
@@ -524,9 +768,11 @@ class GoogleSheetLoader:
                 existing = self.sheet.row_values(1)
             except Exception:
                 existing = []
-            if not existing or [c.strip() for c in existing] != header:
+            # normalize header strings
+            hdr_norm = [c.strip() for c in header]
+            if not existing or [c.strip() for c in existing] != hdr_norm:
                 try:
-                    self.sheet.insert_row(header, index=1)
+                    self.sheet.insert_row(hdr_norm, index=1)
                 except Exception:
                     pass
         batch_values = [[r.get(h, "N/A") for h in header] for r in rows]
@@ -586,3 +832,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+"""
