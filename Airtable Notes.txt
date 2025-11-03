@@ -1,0 +1,20 @@
+How to Enable Airtable 
+
+add below to config.json:
+
+{
+  "google_sheets": {
+    "sheet_name": "Scraped Data",
+    "credentials_file": "credentials.json"
+  },
+  
+  
+  This Part has to be updated
+  
+  "airtable": {
+    "api_key": "YOUR_AIRTABLE_API_KEY",
+    "base_id": "YOUR_BASE_ID",
+    "table_name": "YOUR_TABLE_NAME"
+  }
+}
+
